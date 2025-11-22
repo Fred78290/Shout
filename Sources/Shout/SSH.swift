@@ -201,15 +201,25 @@ public class SSH {
             
             var bytesSent = 0
             while bytesSent < bytesRead {
-                let chunk = bytesSent == 0 ? buffer : buffer.advanced(by: bytesSent)
-                switch channel.write(data: chunk, length: bytesRead - bytesSent) {
-                case .written(let count):
-                    bytesSent += count
-                case .eagain:
-                    break
-                case .error(let error):
-                    throw error
-                }
+				bytesSent += try buffer.withUnsafeMutableBytes {
+                    guard var pointer = $0.bindMemory(to: UInt8.self).baseAddress else {
+                        throw SSHError.genericError("SSH write failed to bind buffer memory")
+                    }
+					
+					pointer += bytesSent
+
+					switch channel.write(data: Data(bytesNoCopy: pointer, count: bytesRead - bytesSent, deallocator: .none), length: bytesRead - bytesSent) {
+					case .written(let count):
+						return count
+					case .eagain:
+						break
+					case .error(let error):
+						throw error
+					}
+					
+					return 0
+				}
+
             }
         }
         
